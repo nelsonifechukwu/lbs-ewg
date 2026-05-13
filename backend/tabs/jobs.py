@@ -55,6 +55,15 @@ def list_applications() -> list[JobApplication]:
 @router.post("/applications")
 def create_application(payload: ItemCreate) -> JobApplication:
     with Session(engine) as session:
+        # Case-insensitive same-tab uniqueness on title. Frontend should
+        # already block this; backend enforces it as the authoritative gate.
+        existing = session.exec(
+            select(JobApplication).where(
+                func.lower(JobApplication.title) == payload.title.lower()
+            )
+        ).first()
+        if existing:
+            raise HTTPException(409, "Application with this title already exists in this tab")
         max_pos = session.exec(
             select(func.coalesce(func.max(JobApplication.position), 0))
         ).one()

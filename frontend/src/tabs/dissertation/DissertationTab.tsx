@@ -92,6 +92,7 @@ export default function DissertationTab() {
   const [editingUrl, setEditingUrl] = useState('')
   const [suggestions, setSuggestions] = useState<SearchResult[]>([])
   const [pendingConfirm, setPendingConfirm] = useState<SearchResult | null>(null)
+  const [sameTabError, setSameTabError] = useState<string | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -121,6 +122,13 @@ export default function DissertationTab() {
     return () => clearTimeout(t)
   }, [newTitle, pendingConfirm])
 
+  // Clear the same-tab error as soon as the user edits the title and tries
+  // again — no need to dismiss it manually.
+  useEffect(() => {
+    if (sameTabError) setSameTabError(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newTitle])
+
   const done = tasks.filter((t) => t.done).length
   const total = tasks.length
   const pct = total === 0 ? 0 : Math.round((done / total) * 100)
@@ -130,13 +138,23 @@ export default function DissertationTab() {
     const title = newTitle.trim()
     if (!title) return
     // Authoritative check at submit time so a fast typist can't outrun the
-    // debounced suggestions and silently create a cross-tab duplicate.
+    // debounced suggestions.
     const results = await searchTasks(title)
-    const exact = results.find(
-      (r) => r.tab !== TAB_ID && r.title.trim().toLowerCase() === title.toLowerCase(),
+    const lower = title.toLowerCase()
+    // Hard block: case-insensitive title duplicate inside this tab.
+    const sameTab = results.find(
+      (r) => r.tab === TAB_ID && r.title.trim().toLowerCase() === lower,
     )
-    if (exact) {
-      setPendingConfirm(exact)
+    if (sameTab) {
+      setSameTabError(`"${sameTab.title}" is already in this tab.`)
+      return
+    }
+    // Soft prompt: same title exists in another tab — offer to add here too.
+    const otherTab = results.find(
+      (r) => r.tab !== TAB_ID && r.title.trim().toLowerCase() === lower,
+    )
+    if (otherTab) {
+      setPendingConfirm(otherTab)
       return
     }
     setNewTitle('')
@@ -245,6 +263,12 @@ export default function DissertationTab() {
           </div>
         )}
       </form>
+
+      {sameTabError && (
+        <div className="mb-4 px-4 py-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-700">
+          {sameTabError}
+        </div>
+      )}
 
       {pendingConfirm && (
         <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm flex items-center gap-3">

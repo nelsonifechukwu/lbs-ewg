@@ -55,6 +55,15 @@ def list_tasks() -> list[DissertationTask]:
 @router.post("/tasks")
 def create_task(payload: ItemCreate) -> DissertationTask:
     with Session(engine) as session:
+        # Case-insensitive same-tab uniqueness on title. Frontend should
+        # already block this; backend enforces it as the authoritative gate.
+        existing = session.exec(
+            select(DissertationTask).where(
+                func.lower(DissertationTask.title) == payload.title.lower()
+            )
+        ).first()
+        if existing:
+            raise HTTPException(409, "Task with this title already exists in this tab")
         max_pos = session.exec(
             select(func.coalesce(func.max(DissertationTask.position), 0))
         ).one()
