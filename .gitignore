@@ -1,3 +1,6 @@
-venv/
-.venv/
-node_modules/
+node_modules
+dist
+lbs.db
+__pycache__
+.venv
+.DS_Store
