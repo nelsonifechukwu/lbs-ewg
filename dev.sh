@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-(cd backend && uvicorn main:app --reload --port 8000) &
+(cd backend && .venv/bin/uvicorn main:app --reload --port 8000) &
 BACKEND_PID=$!
 
 (cd frontend && npm run dev) &
