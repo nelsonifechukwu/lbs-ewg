@@ -96,3 +96,15 @@ picked up.
 
 Snapshots in `backups/` are never deleted by uninstall — only by the >30-day
 prune in `dev.sh` and the launchd job.
+
+### Cross-machine sync via iCloud Drive (optional)
+
+```bash
+# Stop dev.sh first.
+./scripts/icloud-sync.sh
+```
+
+Moves `backend/lbs.db` into iCloud Drive and replaces it with a symlink, so the
+live DB syncs across machines under the same Apple ID. Run the backend on only
+one machine at a time. The script is idempotent — re-run it on a fresh clone
+to recreate the symlink.
