@@ -3,15 +3,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from db import get_conn
-from tabs import dissertation, jobs
+from db import init_db
+from tabs import dissertation, jobs  # noqa: F401  (import registers SQLModel tables)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    with get_conn() as conn:
-        conn.execute(dissertation.CREATE_TABLE)
-        conn.execute(jobs.CREATE_TABLE)
+    init_db()
     yield
 
 

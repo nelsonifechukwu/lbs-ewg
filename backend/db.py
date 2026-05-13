@@ -1,16 +1,14 @@
-import sqlite3
-from contextlib import contextmanager
 from pathlib import Path
+
+from sqlmodel import SQLModel, create_engine
 
 DB_PATH = Path(__file__).parent / "lbs.db"
 
+engine = create_engine(
+    f"sqlite:///{DB_PATH}",
+    connect_args={"check_same_thread": False},
+)
 
-@contextmanager
-def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+
+def init_db():
+    SQLModel.metadata.create_all(engine)
