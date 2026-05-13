@@ -86,6 +86,22 @@ def update_task(task_id: int, payload: ItemUpdate) -> DissertationTask:
         task = session.get(DissertationTask, task_id)
         if not task:
             raise HTTPException(404, "Task not found")
+        # Same case-insensitive uniqueness guard as create — except we also
+        # have to exclude the current row from the conflict search.
+        if (
+            payload.title is not None
+            and payload.title.lower() != task.title.lower()
+        ):
+            conflict = session.exec(
+                select(DissertationTask).where(
+                    func.lower(DissertationTask.title) == payload.title.lower(),
+                    DissertationTask.id != task_id,
+                )
+            ).first()
+            if conflict:
+                raise HTTPException(
+                    409, "Task with this title already exists in this tab"
+                )
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(task, field, value)
         task.updated_at = datetime.now(timezone.utc)

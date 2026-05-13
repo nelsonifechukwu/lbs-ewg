@@ -198,8 +198,24 @@ export default function JobsTab() {
   async function handleSaveEdit(app: Application) {
     const title = editingTitle.trim()
     const url = editingUrl.trim()
+    if (!title) {
+      setEditingId(null)  // empty title cancels the edit
+      return
+    }
+    // Same-tab title-rename uniqueness check. Stay in edit mode on conflict
+    // so the user can correct it without losing their typing.
+    if (title.toLowerCase() !== app.title.toLowerCase()) {
+      const conflict = apps.find(
+        (a) =>
+          a.id !== app.id &&
+          a.title.trim().toLowerCase() === title.toLowerCase(),
+      )
+      if (conflict) {
+        setSameTabError(`"${conflict.title}" is already in this tab.`)
+        return
+      }
+    }
     setEditingId(null)
-    if (!title) return  // empty title would orphan the row
     const patch: Partial<Pick<Application, 'title' | 'url'>> = {}
     if (title !== app.title) patch.title = title
     if (url !== app.url) patch.url = url

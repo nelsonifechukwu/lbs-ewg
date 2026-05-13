@@ -196,8 +196,24 @@ export default function DissertationTab() {
   async function handleSaveEdit(task: Task) {
     const title = editingTitle.trim()
     const url = editingUrl.trim()
+    if (!title) {
+      setEditingId(null)  // empty title cancels the edit
+      return
+    }
+    // Same-tab title-rename uniqueness check. Stay in edit mode on conflict
+    // so the user can correct it without losing their typing.
+    if (title.toLowerCase() !== task.title.toLowerCase()) {
+      const conflict = tasks.find(
+        (t) =>
+          t.id !== task.id &&
+          t.title.trim().toLowerCase() === title.toLowerCase(),
+      )
+      if (conflict) {
+        setSameTabError(`"${conflict.title}" is already in this tab.`)
+        return
+      }
+    }
     setEditingId(null)
-    if (!title) return  // empty title would orphan the row
     const patch: Partial<Pick<Task, 'title' | 'url'>> = {}
     if (title !== task.title) patch.title = title
     if (url !== task.url) patch.url = url

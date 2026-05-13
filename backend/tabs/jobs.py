@@ -86,6 +86,22 @@ def update_application(app_id: int, payload: ItemUpdate) -> JobApplication:
         app = session.get(JobApplication, app_id)
         if not app:
             raise HTTPException(404, "Application not found")
+        # Same case-insensitive uniqueness guard as create — except we also
+        # have to exclude the current row from the conflict search.
+        if (
+            payload.title is not None
+            and payload.title.lower() != app.title.lower()
+        ):
+            conflict = session.exec(
+                select(JobApplication).where(
+                    func.lower(JobApplication.title) == payload.title.lower(),
+                    JobApplication.id != app_id,
+                )
+            ).first()
+            if conflict:
+                raise HTTPException(
+                    409, "Application with this title already exists in this tab"
+                )
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(app, field, value)
         app.updated_at = datetime.now(timezone.utc)
