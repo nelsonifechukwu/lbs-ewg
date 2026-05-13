@@ -2,10 +2,10 @@
 # Restore backend/lbs.db from a snapshot in backups/.
 #
 # Usage:
-#   scripts/restore-db.sh                       # interactive: lists 10 newest
-#   scripts/restore-db.sh <backup-file>         # restore the given file
+#   bin/restore                                  # interactive: lists 10 newest
+#   bin/restore <backup-file>                    # restore the given file
 #
-# Stop the backend (Ctrl+C in dev.sh) BEFORE running this, otherwise the live
+# Stop the backend (Ctrl+C in bin/dev) BEFORE running this, otherwise the live
 # uvicorn process may overwrite the restore with its in-memory state.
 
 set -euo pipefail

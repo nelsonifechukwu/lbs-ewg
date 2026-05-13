@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Uninstall LBS data protection. Does NOT delete backups/ or any snapshots.
 #
-# Pair with: scripts/install-protection.sh
+# Pair with: bin/install-protection
 
 set -euo pipefail
 

@@ -5,9 +5,9 @@
 #   - Layer 1: Claude Code PreToolUse hook that blocks rm/DROP/etc. on lbs.db
 #   - Layer 3: launchd job that snapshots lbs.db every hour to backups/
 #
-# (Layer 2 — snapshot on dev.sh startup — is hardcoded in dev.sh; nothing to do.)
+# (Layer 2 — snapshot on bin/dev startup — bin/dev calls bin/backup itself.)
 #
-# Pair with: scripts/uninstall-protection.sh
+# Pair with: bin/uninstall-protection
 
 set -euo pipefail
 
@@ -52,7 +52,7 @@ cat > ~/Library/LaunchAgents/com.lbs.dbbackup.plist <<EOF
 
     <key>ProgramArguments</key>
     <array>
-        <string>$REPO_ROOT/scripts/backup-db.sh</string>
+        <string>$REPO_ROOT/bin/backup</string>
     </array>
 
     <key>StartInterval</key>

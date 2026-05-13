@@ -99,7 +99,7 @@ log "  frontend/node_modules ready"
 # 5. Make every shipped script executable
 # ---------------------------------------------------------------------------
 log "Marking scripts executable..."
-chmod +x dev.sh scripts/*.sh .claude/hooks/*.sh bin/* 2>/dev/null || true
+chmod +x bin/* .claude/hooks/*.sh 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 6. Data protection (macOS only)
@@ -111,13 +111,13 @@ case "$OS" in
             warn "LBS_SKIP_PROTECTION=1 set; skipping data protection install."
         else
             log "Installing macOS data protection (hook + hourly launchd backup)..."
-            ./scripts/install-protection.sh
+            ./bin/install-protection
         fi
         ;;
     Linux)
         warn "Skipping data protection — current scripts are macOS-only."
         warn "Linux equivalents to set up by hand if you want them:"
-        warn "  - hourly backups: a systemd user timer running scripts/backup-db.sh"
+        warn "  - hourly backups: a systemd user timer running bin/backup"
         warn "  - cross-machine sync: syncthing or rclone on backend/lbs.db"
         ;;
     *)
@@ -132,11 +132,11 @@ log ""
 log "Setup complete."
 log ""
 log "Next:"
-log "  Run the app:        ./dev.sh"
+log "  Run the app:        ./bin/dev"
 case "$OS" in
     Darwin)
         log "  Reload hooks:       open /hooks in Claude Code (or restart) so the"
         log "                      protect-db hook becomes active."
-        log "  Cross-machine DB:   stop dev.sh, then  ./scripts/icloud-sync.sh"
+        log "  Cross-machine DB:   stop ./bin/dev, then  ./bin/icloud-sync"
         ;;
 esac

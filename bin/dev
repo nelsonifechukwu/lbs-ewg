@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bin/dev lives one level below the repo root.
+cd "$(dirname "$0")/.."
+
+# Take a snapshot before booting — same logic the launchd job uses hourly, so
+# every session starts with a fresh checkpoint.
+./bin/backup
+
+(cd backend && .venv/bin/uvicorn main:app --reload --port 8000) &
+BACKEND_PID=$!
+
+(cd frontend && npm run dev) &
+FRONTEND_PID=$!
+
+trap 'kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true' SIGINT SIGTERM EXIT
+
+wait
