@@ -58,3 +58,41 @@ Each tab file is intentionally self-contained — types, fetch helpers, and the
 component all live next to each other. Adding a new tab means copying one of the
 existing tab files and registering it in `registry.ts` (frontend) + including
 its router and table in `main.py` (backend).
+
+## Data protection (lbs.db)
+
+Three layers guard the SQLite file:
+
+1. **PreToolUse hook** — `.claude/hooks/protect-db.sh` blocks Claude Code from
+   running `rm`/`mv`/`DROP TABLE`/`drop_all`/`Write`/`Edit` against `lbs.db`.
+   Override for one command with `CLAUDE_ALLOW_DB_DESTROY=1`.
+2. **Snapshot on every `./dev.sh` start** — automatic, no setup. Copies live to
+   `backups/lbs.db.bak-<timestamp>` and prunes >30 days old.
+3. **Hourly launchd job** — uses SQLite's online backup API. Survives
+   mid-session loss.
+
+### Setup (one-time, per machine)
+
+```bash
+./scripts/install-protection.sh
+```
+
+Then open `/hooks` once in Claude Code (or restart the session) so the hook is
+picked up.
+
+### Restore from a snapshot
+
+```bash
+# Stop dev.sh first (Ctrl+C).
+./scripts/restore-db.sh                       # interactive picker
+./scripts/restore-db.sh backups/lbs.db.bak-20260513-115632
+```
+
+### Remove everything
+
+```bash
+./scripts/uninstall-protection.sh             # removes hook + launchd job
+```
+
+Snapshots in `backups/` are never deleted by uninstall — only by the >30-day
+prune in `dev.sh` and the launchd job.

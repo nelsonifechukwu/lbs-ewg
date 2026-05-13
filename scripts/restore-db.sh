@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Restore backend/lbs.db from a snapshot in backups/.
+#
+# Usage:
+#   scripts/restore-db.sh                       # interactive: lists 10 newest
+#   scripts/restore-db.sh <backup-file>         # restore the given file
+#
+# Stop the backend (Ctrl+C in dev.sh) BEFORE running this, otherwise the live
+# uvicorn process may overwrite the restore with its in-memory state.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+DB="backend/lbs.db"
+
+if [ $# -ge 1 ]; then
+    BAK="$1"
+else
+    echo "10 newest snapshots in backups/:"
+    ls -1t backups/lbs.db.bak-* 2>/dev/null | head -10 | nl
+    echo ""
+    read -p "Path to backup to restore: " BAK
+fi
+
+if [ ! -f "$BAK" ]; then
+    echo "Not a file: $BAK" >&2
+    exit 1
+fi
+
+# Snapshot the current DB before overwriting it — otherwise the restore is
+# itself irreversible.
+if [ -f "$DB" ]; then
+    SAFETY="$DB.pre-restore-$(date +%Y%m%d-%H%M%S)"
+    cp "$DB" "$SAFETY"
+    echo "Saved pre-restore copy to $SAFETY"
+fi
+
+cp "$BAK" "$DB"
+echo "Restored $BAK -> $DB"

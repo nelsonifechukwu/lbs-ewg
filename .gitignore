@@ -1,6 +1,7 @@
 node_modules
 dist
 lbs.db
+backups/
 __pycache__
 .venv
 venv
