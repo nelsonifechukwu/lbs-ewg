@@ -25,6 +25,7 @@ class ItemCreate(BaseModel):
     title: str
     notes: str = ""
     url: str = ""
+    done: bool = False
 
 
 class ItemUpdate(BaseModel):
@@ -61,6 +62,7 @@ def create_application(payload: ItemCreate) -> JobApplication:
             title=payload.title,
             notes=payload.notes,
             url=payload.url,
+            done=payload.done,
             position=max_pos + 1,
         )
         session.add(app)

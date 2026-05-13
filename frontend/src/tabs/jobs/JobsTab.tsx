@@ -15,6 +15,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
+const TAB_ID = 'jobs'
+
 type Application = {
   id: number
   title: string
@@ -26,19 +28,32 @@ type Application = {
   updated_at: string
 }
 
+type SearchResult = {
+  title: string
+  done: boolean
+  tab: string
+  tab_label: string
+}
+
 async function fetchApplications(): Promise<Application[]> {
   const r = await fetch('/api/jobs/applications')
   if (!r.ok) throw new Error('Failed to fetch applications')
   return r.json()
 }
 
-async function createApplication(title: string): Promise<Application> {
+async function createApplication(title: string, done = false): Promise<Application> {
   const r = await fetch('/api/jobs/applications', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, done }),
   })
   if (!r.ok) throw new Error('Failed to create application')
+  return r.json()
+}
+
+async function searchTasks(q: string): Promise<SearchResult[]> {
+  const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+  if (!r.ok) throw new Error('Failed to search')
   return r.json()
 }
 
@@ -77,6 +92,8 @@ export default function JobsTab() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [editingUrl, setEditingUrl] = useState('')
+  const [suggestions, setSuggestions] = useState<SearchResult[]>([])
+  const [pendingConfirm, setPendingConfirm] = useState<SearchResult | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -90,6 +107,22 @@ export default function JobsTab() {
     refresh().catch(console.error)
   }, [])
 
+  // Debounced cross-tab title search. Same-tab hits are filtered out — they'd
+  // just suggest adding a duplicate to the tab the user is already on.
+  useEffect(() => {
+    const q = newTitle.trim()
+    if (!q || pendingConfirm) {
+      setSuggestions([])
+      return
+    }
+    const t = setTimeout(() => {
+      searchTasks(q)
+        .then((results) => setSuggestions(results.filter((r) => r.tab !== TAB_ID)))
+        .catch(console.error)
+    }, 150)
+    return () => clearTimeout(t)
+  }, [newTitle, pendingConfirm])
+
   const done = apps.filter((a) => a.done).length
   const total = apps.length
   const pct = total === 0 ? 0 : Math.round((done / total) * 100)
@@ -98,9 +131,40 @@ export default function JobsTab() {
     e.preventDefault()
     const title = newTitle.trim()
     if (!title) return
+    // Authoritative check at submit time so a fast typist can't outrun the
+    // debounced suggestions and silently create a cross-tab duplicate.
+    const results = await searchTasks(title)
+    const exact = results.find(
+      (r) => r.tab !== TAB_ID && r.title.trim().toLowerCase() === title.toLowerCase(),
+    )
+    if (exact) {
+      setPendingConfirm(exact)
+      return
+    }
     setNewTitle('')
+    setSuggestions([])
     await createApplication(title)
     await refresh()
+  }
+
+  function handlePickSuggestion(s: SearchResult) {
+    setNewTitle(s.title)
+    setSuggestions([])
+    setPendingConfirm(s)
+  }
+
+  async function handleConfirmAdd() {
+    if (!pendingConfirm) return
+    const { title, done } = pendingConfirm
+    setPendingConfirm(null)
+    setNewTitle('')
+    setSuggestions([])
+    await createApplication(title, done)
+    await refresh()
+  }
+
+  function handleCancelConfirm() {
+    setPendingConfirm(null)
   }
 
   async function handleToggle(app: Application) {
@@ -158,7 +222,7 @@ export default function JobsTab() {
         </div>
       </header>
 
-      <form onSubmit={handleAdd} className="mb-4">
+      <form onSubmit={handleAdd} className="mb-4 relative">
         <input
           type="text"
           value={newTitle}
@@ -166,7 +230,49 @@ export default function JobsTab() {
           placeholder="Add application..."
           className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-500 shadow-sm"
         />
+        {suggestions.length > 0 && !pendingConfirm && (
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden z-10">
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => handlePickSuggestion(s)}
+                className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 flex items-center gap-2"
+              >
+                {s.done && <span className="text-emerald-600 text-xs">✓</span>}
+                <span className={s.done ? 'line-through text-slate-400' : 'text-slate-700'}>
+                  {s.title}
+                </span>
+                <span className="ml-auto text-xs text-slate-400">in {s.tab_label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </form>
+
+      {pendingConfirm && (
+        <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg text-sm flex items-center gap-3">
+          <span className="text-slate-700 flex-1">
+            “<strong>{pendingConfirm.title}</strong>” already exists in{' '}
+            {pendingConfirm.tab_label}
+            {pendingConfirm.done && ' (done)'}. Add here too?
+          </span>
+          <button
+            type="button"
+            onClick={handleConfirmAdd}
+            className="bg-sky-600 hover:bg-sky-700 text-white text-xs px-3 py-1 rounded"
+          >
+            Add{pendingConfirm.done ? ' as done' : ''}
+          </button>
+          <button
+            type="button"
+            onClick={handleCancelConfirm}
+            className="text-slate-500 hover:text-slate-700 text-xs"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
         <DndContext

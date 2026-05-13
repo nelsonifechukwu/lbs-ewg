@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from db import init_db
 from tabs import dissertation, jobs  # noqa: F401  (import registers SQLModel tables)
+import search
 
 
 @asynccontextmanager
@@ -25,3 +26,4 @@ app.add_middleware(
 
 app.include_router(dissertation.router)
 app.include_router(jobs.router)
+app.include_router(search.router)
