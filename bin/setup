@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# bin/setup — bootstrap a fresh clone of LBS.
+#
+# What it does:
+#   1. Verifies Python 3.10+ and Node 20+ are installed
+#   2. Creates backend/.venv and installs Python deps
+#   3. Runs npm install in frontend/
+#   4. Marks all repo scripts executable
+#   5. (macOS only) Installs the data protection hook + hourly launchd backup
+#
+# Idempotent — safe to re-run at any time. Re-runs are cheap because pip/npm
+# only fetch what's missing.
+#
+# Works on: macOS, Linux, WSL, Git Bash on Windows.
+# Windows native users: see bin/setup.ps1, or use WSL2.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+OS="$(uname -s)"
+
+log()  { printf '\033[1;36m[setup]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[warn ]\033[0m %s\n' "$*" >&2; }
+err()  { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; }
+
+# ---------------------------------------------------------------------------
+# 1. Python 3.10+
+# ---------------------------------------------------------------------------
+log "Looking for Python 3.10+..."
+
+PYTHON=""
+for cand in python3.13 python3.12 python3.11 python3.10 python3 python; do
+    command -v "$cand" >/dev/null 2>&1 || continue
+    ver="$("$cand" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || true)"
+    case "$ver" in
+        3.1[0-9]|3.[2-9][0-9])
+            PYTHON="$cand"
+            break
+            ;;
+    esac
+done
+
+if [ -z "$PYTHON" ]; then
+    err "Python 3.10+ not found."
+    case "$OS" in
+        Darwin) err "  Install with:  brew install python@3.13" ;;
+        Linux)  err "  Debian/Ubuntu:  sudo apt install python3.13 python3.13-venv"
+                err "  Fedora/RHEL:    sudo dnf install python3.13"
+                err "  Arch:           sudo pacman -S python" ;;
+        *)      err "  Download: https://www.python.org/downloads/" ;;
+    esac
+    exit 1
+fi
+log "  using $PYTHON ($("$PYTHON" --version))"
+
+# ---------------------------------------------------------------------------
+# 2. Node 20+
+# ---------------------------------------------------------------------------
+log "Looking for Node 20+..."
+
+if ! command -v node >/dev/null 2>&1; then
+    err "Node not found."
+    case "$OS" in
+        Darwin) err "  Install with:  brew install node" ;;
+        Linux)  err "  Install via nvm:  https://github.com/nvm-sh/nvm" ;;
+        *)      err "  Download: https://nodejs.org/" ;;
+    esac
+    exit 1
+fi
+
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+if [ "$NODE_MAJOR" -lt 20 ]; then
+    warn "Node ${NODE_MAJOR}.x is older than the recommended 20+. Things may work, may not."
+fi
+log "  using node $(node --version)"
+
+# ---------------------------------------------------------------------------
+# 3. Backend venv + deps
+# ---------------------------------------------------------------------------
+log "Setting up backend (Python venv + deps)..."
+
+if [ ! -d backend/.venv ]; then
+    "$PYTHON" -m venv backend/.venv
+fi
+backend/.venv/bin/pip install --upgrade pip --quiet
+backend/.venv/bin/pip install -r backend/requirements.txt --quiet
+log "  backend/.venv ready"
+
+# ---------------------------------------------------------------------------
+# 4. Frontend deps
+# ---------------------------------------------------------------------------
+log "Installing frontend deps (this can take a moment on first run)..."
+(cd frontend && npm install --silent)
+log "  frontend/node_modules ready"
+
+# ---------------------------------------------------------------------------
+# 5. Make every shipped script executable
+# ---------------------------------------------------------------------------
+log "Marking scripts executable..."
+chmod +x dev.sh scripts/*.sh .claude/hooks/*.sh bin/* 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# 6. Data protection (macOS only)
+# ---------------------------------------------------------------------------
+# Skippable with LBS_SKIP_PROTECTION=1, useful for CI or transient setups.
+case "$OS" in
+    Darwin)
+        if [ "${LBS_SKIP_PROTECTION:-}" = "1" ]; then
+            warn "LBS_SKIP_PROTECTION=1 set; skipping data protection install."
+        else
+            log "Installing macOS data protection (hook + hourly launchd backup)..."
+            ./scripts/install-protection.sh
+        fi
+        ;;
+    Linux)
+        warn "Skipping data protection — current scripts are macOS-only."
+        warn "Linux equivalents to set up by hand if you want them:"
+        warn "  - hourly backups: a systemd user timer running scripts/backup-db.sh"
+        warn "  - cross-machine sync: syncthing or rclone on backend/lbs.db"
+        ;;
+    *)
+        warn "Unknown OS '$OS'; skipping data protection."
+        ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Final guidance
+# ---------------------------------------------------------------------------
+log ""
+log "Setup complete."
+log ""
+log "Next:"
+log "  Run the app:        ./dev.sh"
+case "$OS" in
+    Darwin)
+        log "  Reload hooks:       open /hooks in Claude Code (or restart) so the"
+        log "                      protect-db hook becomes active."
+        log "  Cross-machine DB:   stop dev.sh, then  ./scripts/icloud-sync.sh"
+        ;;
+esac

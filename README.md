@@ -5,24 +5,40 @@ jobs, ...). Each tab is its own self-contained module on both ends.
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.10+
 - Node 20+
 
-## Setup
+(macOS users: `brew install python@3.13 node`. Linux: your distro's package
+manager. Windows native: install both from python.org / nodejs.org, **plus**
+either Git Bash or WSL2 to run the bash scripts.)
+
+## First-time setup
+
+One command. Idempotent — re-run any time:
+
+**macOS / Linux / WSL / Git Bash:**
 
 ```bash
-# backend
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cd ..
-
-# frontend
-cd frontend
-npm install
-cd ..
+bin/setup
 ```
+
+**Windows (PowerShell):**
+
+```powershell
+bin\setup.ps1
+```
+
+What `bin/setup` does:
+
+1. Verifies Python 3.10+ and Node 20+ are present (with install hints if not)
+2. Creates `backend/.venv` and installs Python deps
+3. Runs `npm install` in `frontend/`
+4. Marks every shipped `.sh` script executable
+5. (macOS only) Installs the data protection hook + hourly launchd backup —
+   set `LBS_SKIP_PROTECTION=1` to skip
+
+After it finishes, open `/hooks` once in Claude Code so the `protect-db.sh`
+hook becomes active for this session.
 
 ## Running
 
