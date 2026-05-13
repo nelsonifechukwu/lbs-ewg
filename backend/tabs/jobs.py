@@ -14,6 +14,7 @@ class JobApplication(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     title: str
     notes: str = ""
+    url: str = ""
     done: bool = False
     position: float
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -23,11 +24,13 @@ class JobApplication(SQLModel, table=True):
 class ItemCreate(BaseModel):
     title: str
     notes: str = ""
+    url: str = ""
 
 
 class ItemUpdate(BaseModel):
     title: str | None = None
     notes: str | None = None
+    url: str | None = None
     done: bool | None = None
 
 
@@ -57,6 +60,7 @@ def create_application(payload: ItemCreate) -> JobApplication:
         app = JobApplication(
             title=payload.title,
             notes=payload.notes,
+            url=payload.url,
             position=max_pos + 1,
         )
         session.add(app)

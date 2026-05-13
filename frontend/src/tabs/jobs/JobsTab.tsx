@@ -19,6 +19,7 @@ type Application = {
   id: number
   title: string
   notes: string
+  url: string
   done: boolean
   position: number
   created_at: string
@@ -43,7 +44,7 @@ async function createApplication(title: string): Promise<Application> {
 
 async function patchApplication(
   id: number,
-  patch: Partial<Pick<Application, 'title' | 'notes' | 'done'>>,
+  patch: Partial<Pick<Application, 'title' | 'notes' | 'url' | 'done'>>,
 ): Promise<Application> {
   const r = await fetch(`/api/jobs/applications/${id}`, {
     method: 'PATCH',
@@ -75,6 +76,7 @@ export default function JobsTab() {
   const [newTitle, setNewTitle] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
+  const [editingUrl, setEditingUrl] = useState('')
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -111,11 +113,16 @@ export default function JobsTab() {
     await refresh()
   }
 
-  async function handleSaveTitle(app: Application) {
+  async function handleSaveEdit(app: Application) {
     const title = editingTitle.trim()
+    const url = editingUrl.trim()
     setEditingId(null)
-    if (!title || title === app.title) return
-    await patchApplication(app.id, { title })
+    if (!title) return  // empty title would orphan the row
+    const patch: Partial<Pick<Application, 'title' | 'url'>> = {}
+    if (title !== app.title) patch.title = title
+    if (url !== app.url) patch.url = url
+    if (Object.keys(patch).length === 0) return
+    await patchApplication(app.id, patch)
     await refresh()
   }
 
@@ -183,12 +190,15 @@ export default function JobsTab() {
                   editing={editingId === app.id}
                   editingTitle={editingTitle}
                   setEditingTitle={setEditingTitle}
+                  editingUrl={editingUrl}
+                  setEditingUrl={setEditingUrl}
                   onToggle={() => handleToggle(app)}
                   onStartEdit={() => {
                     setEditingId(app.id)
                     setEditingTitle(app.title)
+                    setEditingUrl(app.url)
                   }}
-                  onSaveEdit={() => handleSaveTitle(app)}
+                  onSaveEdit={() => handleSaveEdit(app)}
                   onCancelEdit={() => setEditingId(null)}
                   onDelete={() => handleDelete(app.id)}
                 />
@@ -206,6 +216,8 @@ type RowProps = {
   editing: boolean
   editingTitle: string
   setEditingTitle: (v: string) => void
+  editingUrl: string
+  setEditingUrl: (v: string) => void
   onToggle: () => void
   onStartEdit: () => void
   onSaveEdit: () => void
@@ -218,6 +230,8 @@ function SortableRow({
   editing,
   editingTitle,
   setEditingTitle,
+  editingUrl,
+  setEditingUrl,
   onToggle,
   onStartEdit,
   onSaveEdit,
@@ -255,26 +269,60 @@ function SortableRow({
         className="w-4 h-4 accent-sky-600 cursor-pointer"
       />
       {editing ? (
-        <input
-          type="text"
-          value={editingTitle}
-          onChange={(e) => setEditingTitle(e.target.value)}
-          onBlur={onSaveEdit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') onSaveEdit()
-            if (e.key === 'Escape') onCancelEdit()
+        <div
+          className="flex-1 flex flex-col gap-1"
+          onBlur={(e) => {
+            // Save only when focus leaves the edit container entirely —
+            // moving focus between the title and url inputs shouldn't commit.
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              onSaveEdit()
+            }
           }}
-          autoFocus
-          className="flex-1 bg-white border border-sky-500 rounded px-2 py-0.5 text-sm focus:outline-none"
-        />
+        >
+          <input
+            type="text"
+            value={editingTitle}
+            onChange={(e) => setEditingTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onSaveEdit()
+              if (e.key === 'Escape') onCancelEdit()
+            }}
+            autoFocus
+            placeholder="Title"
+            className="bg-white border border-sky-500 rounded px-2 py-0.5 text-sm focus:outline-none"
+          />
+          <input
+            type="text"
+            value={editingUrl}
+            onChange={(e) => setEditingUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onSaveEdit()
+              if (e.key === 'Escape') onCancelEdit()
+            }}
+            placeholder="https://… (optional)"
+            className="bg-white border border-slate-200 rounded px-2 py-0.5 text-xs text-slate-500 focus:outline-none focus:border-sky-500"
+          />
+        </div>
       ) : (
         <span
           onClick={onStartEdit}
-          className={`flex-1 text-sm cursor-text ${
+          className={`flex-1 text-sm cursor-text flex items-center gap-2 ${
             app.done ? 'text-slate-400 line-through' : 'text-slate-700'
           }`}
         >
-          {app.title}
+          <span>{app.title}</span>
+          {app.url && (
+            <a
+              href={app.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-sky-600 hover:text-sky-700 text-xs no-underline"
+              aria-label="Open link"
+            >
+              ↗
+            </a>
+          )}
         </span>
       )}
       <button
