@@ -241,6 +241,21 @@ function SortableRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: app.id })
 
+  // Two-step delete: first click arms, second click within 3s confirms.
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  useEffect(() => {
+    if (!confirmingDelete) return
+    const t = setTimeout(() => setConfirmingDelete(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirmingDelete])
+  const handleDeleteClick = () => {
+    if (confirmingDelete) {
+      onDelete()
+    } else {
+      setConfirmingDelete(true)
+    }
+  }
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -326,12 +341,16 @@ function SortableRow({
         </span>
       )}
       <button
-        onClick={onDelete}
-        className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm"
-        aria-label="Delete"
+        onClick={handleDeleteClick}
+        className={
+          confirmingDelete
+            ? 'bg-rose-500 hover:bg-rose-600 text-white text-xs px-2 py-0.5 rounded transition-colors'
+            : 'text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm'
+        }
+        aria-label={confirmingDelete ? 'Click again to confirm delete' : 'Delete'}
         type="button"
       >
-        ✕
+        {confirmingDelete ? 'Delete?' : '✕'}
       </button>
     </div>
   )
