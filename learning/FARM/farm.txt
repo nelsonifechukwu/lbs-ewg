@@ -1,3 +1,0 @@
-FARM Stack Course - Full Stack Development with FASTAPI, React MongoDB
-
-https://www.youtube.com/watch?v=PWG7NlUDVaA
