@@ -16,6 +16,8 @@ type Entry = {
   why: string
   primary_url: string
   image_url: string | null
+  // tags remains in the DB but is no longer surfaced by the UI — search,
+  // form, and display all omit it. Treated as opaque on the frontend.
   tags: string
   links: string[]
   last_visited_at: string | null
@@ -29,7 +31,6 @@ type EntryDraft = {
   primary_url: string
   blurb: string
   why: string
-  tags: string
   other_links: string  // textarea raw — split on newlines at submit
 }
 
@@ -120,7 +121,6 @@ type CreatePayload = {
   primary_url: string
   blurb: string
   why: string
-  tags: string
   links: string[]
 }
 
@@ -136,7 +136,7 @@ async function createEntry(payload: CreatePayload): Promise<Entry> {
 
 async function updateEntry(
   id: number,
-  patch: Partial<Pick<Entry, 'entry_type' | 'name' | 'blurb' | 'why' | 'primary_url' | 'tags' | 'links'>>,
+  patch: Partial<Pick<Entry, 'entry_type' | 'name' | 'blurb' | 'why' | 'primary_url' | 'links'>>,
 ): Promise<Entry> {
   const r = await fetch(`/api/thinkers/entries/${id}`, {
     method: 'PATCH',
@@ -308,7 +308,6 @@ function EntryForm({ initial, submitting, onSubmit, onCancel }: EntryFormProps) 
     primary_url: initial?.primary_url ?? '',
     blurb: initial?.blurb ?? '',
     why: initial?.why ?? '',
-    tags: initial?.tags ?? '',
     other_links: (initial?.links ?? []).join('\n'),
   })
   const [error, setError] = useState<string | null>(null)
@@ -387,13 +386,6 @@ function EntryForm({ initial, submitting, onSubmit, onCancel }: EntryFormProps) 
         value={draft.why}
         onChange={(e) => setDraft({ ...draft, why: e.target.value })}
         placeholder="Why does this matter to you?"
-        className={inputCls}
-      />
-      <input
-        type="text"
-        value={draft.tags}
-        onChange={(e) => setDraft({ ...draft, tags: e.target.value })}
-        placeholder="Tags (comma-separated)"
         className={inputCls}
       />
       <textarea
@@ -499,8 +491,7 @@ export default function ThinkersTab() {
         (e) =>
           e.name.toLowerCase().includes(q) ||
           e.blurb.toLowerCase().includes(q) ||
-          e.why.toLowerCase().includes(q) ||
-          e.tags.toLowerCase().includes(q),
+          e.why.toLowerCase().includes(q),
       )
     }
     const sorted = [...result]
@@ -531,7 +522,6 @@ export default function ThinkersTab() {
       primary_url: draft.primary_url.trim(),
       blurb: draft.blurb.trim(),
       why: draft.why.trim(),
-      tags: draft.tags.trim(),
       links,
     }
   }
@@ -598,7 +588,7 @@ export default function ThinkersTab() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, blurb, why, tags..."
+            placeholder="Search name, blurb, why..."
             className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-500"
           />
         </div>
