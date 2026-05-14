@@ -51,7 +51,7 @@ export default function LandingPage() {
         </div>
         <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
           <div
-            className="h-full bg-sky-600 transition-all"
+            className="h-full bg-emerald-600 transition-all"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -73,7 +73,7 @@ export default function LandingPage() {
                 </span>
                 <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-sky-600 transition-all"
+                    className="h-full bg-emerald-600 transition-all"
                     style={{ width: `${sPct}%` }}
                   />
                 </div>
