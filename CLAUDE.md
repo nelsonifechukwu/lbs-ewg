@@ -6,13 +6,24 @@ machine, single source of truth (`backend/lbs.db`).
 
 **Tabs don't have to be identical mirrors.** Dissertation and Jobs are
 to-do lists with shared shape (title/done/position) and use SQLModel.
-Thinkers is a richer card grid (people and channels with images, tags,
-external links, last-visited tracking) and uses **plain sqlite3 with
-inline SQL** because its schema (JSON-encoded links, nullable
-image_url, async image fetch on create) reads more clearly as raw SQL
-than as ORM. The "self-contained per tab" principle accommodates this:
-each tab picks the storage style that fits its shape, as long as the
-file stays readable top-to-bottom.
+Thinkers is a richer card grid (open-ended `entry_type` like person /
+channel / podcast / book / ..., with images, tags, external links,
+last-visited tracking) and uses **plain sqlite3 with inline SQL**
+because its schema (JSON-encoded links, nullable image_url, async
+image fetch on create) reads more clearly as raw SQL than as ORM.
+The "self-contained per tab" principle accommodates this: each tab
+picks the storage style that fits its shape, as long as the file stays
+readable top-to-bottom.
+
+`Thinkers.entry_type` is intentionally an open string (no CHECK
+constraint in SQL, `type EntryType = string` in TS). `TYPE_META` in
+`ThinkersTab.tsx` is the single source of truth for *well-known* types
+— each entry gets an autocomplete suggestion + curated pill icon — but
+the user can type anything and the UI falls back gracefully
+(`typeMeta()` returns a generic icon and uses the raw string as
+label). Filter chips are derived from the distinct types actually
+present in the data, so adding a new kind of thinker doesn't require
+any code change.
 
 This file is the load-bearing summary of how this project is built. When
 the project's paradigms change, **update this file in the same commit** so

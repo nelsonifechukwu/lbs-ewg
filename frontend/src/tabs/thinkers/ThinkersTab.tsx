@@ -2,7 +2,11 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 
 // ─────────────────────── types ───────────────────────
 
-type EntryType = 'person' | 'channel'
+// EntryType is an open string. TYPE_META lists the well-known values for
+// autocomplete and nice pill rendering, but the user can type anything (e.g.
+// "podcast", "book", "newsletter") and the backend stores it as-is. Display
+// falls back to a generic icon for unknown values.
+type EntryType = string
 
 type Entry = {
   id: number
@@ -30,11 +34,25 @@ type EntryDraft = {
 }
 
 // ─────────────────────── type meta (single source of truth) ───────────────────────
-// Adding a future entry type means adding one line here and updating EntryType.
+// Well-known types with curated labels + icons. Unknown types still work —
+// they just render with the raw string as label and a generic ti-circle icon.
+// Adding a future well-known type is one line here.
 
-const TYPE_META: Record<EntryType, { label: string; icon: string }> = {
+const TYPE_META: Record<string, { label: string; icon: string }> = {
   person: { label: 'Person', icon: 'ti-user' },
   channel: { label: 'Channel', icon: 'ti-brand-youtube' },
+  podcast: { label: 'Podcast', icon: 'ti-microphone' },
+  book: { label: 'Book', icon: 'ti-book-2' },
+  paper: { label: 'Paper', icon: 'ti-file-text' },
+  talk: { label: 'Talk', icon: 'ti-presentation' },
+  newsletter: { label: 'Newsletter', icon: 'ti-mail' },
+  blog: { label: 'Blog', icon: 'ti-writing' },
+}
+
+const UNKNOWN_TYPE_ICON = 'ti-circle-dot'
+
+function typeMeta(t: string): { label: string; icon: string } {
+  return TYPE_META[t] ?? { label: t, icon: UNKNOWN_TYPE_ICON }
 }
 
 // ─────────────────────── helpers ───────────────────────
@@ -161,8 +179,7 @@ function EntryCard({ entry, onEdit, onDelete }: EntryCardProps) {
 
   const mono = monogram(entry.name)
   const useMonogram = !entry.image_url || imgFailed
-  const meta =
-    TYPE_META[entry.entry_type] ?? { label: entry.entry_type, icon: 'ti-circle' }
+  const meta = typeMeta(entry.entry_type)
 
   function openPrimary() {
     visitEntry(entry.id).catch(() => {
@@ -326,19 +343,20 @@ function EntryForm({ initial, submitting, onSubmit, onCancel }: EntryFormProps) 
         {isEdit ? 'Edit thinker' : 'Add thinker'}
       </h2>
 
-      <div className="flex gap-4 text-sm text-slate-700">
-        {(['person', 'channel'] as EntryType[]).map((t) => (
-          <label key={t} className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              name="entry_type"
-              checked={draft.entry_type === t}
-              onChange={() => setDraft({ ...draft, entry_type: t })}
-              className="accent-sky-600"
-            />
-            <span>{TYPE_META[t].label}</span>
-          </label>
-        ))}
+      <div>
+        <input
+          type="text"
+          list="entry-types"
+          value={draft.entry_type}
+          onChange={(e) => setDraft({ ...draft, entry_type: e.target.value })}
+          placeholder="Type (person, channel, podcast, book, ...)"
+          className={inputCls}
+        />
+        <datalist id="entry-types">
+          {Object.keys(TYPE_META).map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
       </div>
 
       <input
@@ -457,6 +475,18 @@ export default function ThinkersTab() {
     return () => document.removeEventListener('keydown', onKey)
   }, [modal.kind])
 
+  // Distinct entry_types that exist in the current list, so the filter row
+  // grows naturally as new types appear. Ordered: well-known types first
+  // (in TYPE_META declaration order), then any custom types alphabetically.
+  const distinctTypes = useMemo(() => {
+    const present = new Set(entries.map((e) => e.entry_type))
+    const known = Object.keys(TYPE_META).filter((t) => present.has(t))
+    const custom = Array.from(present)
+      .filter((t) => !(t in TYPE_META))
+      .sort()
+    return [...known, ...custom]
+  }, [entries])
+
   const filtered = useMemo(() => {
     let result = entries
     if (typeFilter !== 'all') {
@@ -561,8 +591,8 @@ export default function ThinkersTab() {
             className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-500"
           />
         </div>
-        <div className="flex bg-slate-100 rounded-lg p-0.5">
-          {(['all', 'person', 'channel'] as const).map((f) => (
+        <div className="flex bg-slate-100 rounded-lg p-0.5 flex-wrap">
+          {(['all', ...distinctTypes] as const).map((f) => (
             <button
               key={f}
               type="button"
@@ -573,7 +603,7 @@ export default function ThinkersTab() {
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              {f === 'all' ? 'All' : TYPE_META[f].label}
+              {f === 'all' ? 'All' : typeMeta(f).label}
             </button>
           ))}
         </div>
