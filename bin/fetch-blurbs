@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Fetch og:description for each Thinkers entry whose blurb is empty.
+
+Walks GET /api/thinkers/entries, and for any entry with an empty blurb,
+fetches the primary_url, parses BeautifulSoup, pulls
+<meta property="og:description"> (or twitter:description as a fallback),
+and PATCHes blurb on the entry.
+
+Best-effort. Pages that don't expose og:description, that block scrapers
+(LinkedIn, etc.), or that time out are left untouched.
+
+Usage:
+    bin/fetch-blurbs                    # default 5 workers
+    bin/fetch-blurbs --concurrency 8
+
+Requires the backend to be running on :8000 and httpx + bs4 (already in
+backend/requirements.txt).
+"""
+
+import argparse
+import json
+import sys
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Import from the backend venv. This script is meant to be invoked via the
+# venv python directly: backend/.venv/bin/python bin/fetch-blurbs
+import httpx
+from bs4 import BeautifulSoup
+
+API_LIST = "http://localhost:8000/api/thinkers/entries"
+
+
+def fetch_description(url: str) -> str | None:
+    """Returns the page's og:description (or twitter:description fallback),
+    or None on any failure."""
+    try:
+        with httpx.Client(
+            timeout=5.0,
+            follow_redirects=True,
+            headers={"User-Agent": "LBS/1.0"},
+        ) as c:
+            r = c.get(url)
+            r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        for tag in (
+            soup.find("meta", property="og:description"),
+            soup.find("meta", attrs={"name": "twitter:description"}),
+            soup.find("meta", attrs={"name": "description"}),
+        ):
+            if tag and tag.get("content"):
+                text = str(tag["content"]).strip()
+                if text:
+                    return text
+        return None
+    except Exception:
+        return None
+
+
+def patch_blurb(entry_id: int, blurb: str) -> tuple[bool, str]:
+    req = urllib.request.Request(
+        f"http://localhost:8000/api/thinkers/entries/{entry_id}",
+        data=json.dumps({"blurb": blurb}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="PATCH",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            r.read()
+        return True, "patched"
+    except urllib.error.HTTPError as e:
+        return False, f"HTTP {e.code}"
+    except Exception as e:
+        return False, str(e)
+
+
+def process_one(entry: dict) -> tuple[int, str, bool, str]:
+    desc = fetch_description(entry["primary_url"])
+    if not desc:
+        return entry["id"], entry["name"], False, "no description"
+    ok, msg = patch_blurb(entry["id"], desc)
+    return entry["id"], entry["name"], ok, desc[:80] if ok else msg
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--concurrency", type=int, default=5)
+    args = p.parse_args()
+
+    with urllib.request.urlopen(API_LIST, timeout=10) as r:
+        entries = json.loads(r.read())
+
+    candidates = [e for e in entries if not (e.get("blurb") or "").strip()]
+    print(
+        f"{len(entries)} entries total, "
+        f"{len(candidates)} with empty blurb — fetching og:description for those"
+    )
+    print()
+
+    filled = 0
+    skipped = 0
+    with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
+        futs = {ex.submit(process_one, e): e for e in candidates}
+        done = 0
+        for fut in as_completed(futs):
+            done += 1
+            entry_id, name, ok, msg = fut.result()
+            symbol = "✓" if ok else "·"
+            print(
+                f"  [{done:3d}/{len(candidates)}] {symbol} "
+                f"id={entry_id:<4d} {name[:24]:24s}  {msg}"
+            )
+            if ok:
+                filled += 1
+            else:
+                skipped += 1
+
+    print()
+    print(f"Done: {filled} blurbs filled, {skipped} skipped.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

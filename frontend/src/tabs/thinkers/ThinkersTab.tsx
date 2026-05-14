@@ -229,7 +229,9 @@ function EntryCard({ entry, onEdit, onDelete, onVisit }: EntryCardProps) {
             <div className="flex-1 min-w-0">
               <div className="font-medium text-slate-700 truncate">{entry.name}</div>
               {entry.blurb && (
-                <div className="text-sm text-slate-500 truncate">{entry.blurb}</div>
+                <div className="text-sm text-slate-500 line-clamp-2">
+                  {entry.blurb}
+                </div>
               )}
             </div>
             <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 text-xs whitespace-nowrap">
