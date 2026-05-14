@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 // ─────────────────────── types ───────────────────────
 
@@ -158,6 +158,18 @@ async function visitEntry(id: number): Promise<void> {
   await fetch(`/api/thinkers/entries/${id}/visit`, { method: 'POST' })
 }
 
+async function uploadImage(file: File): Promise<string> {
+  const fd = new FormData()
+  fd.append('file', file)
+  const r = await fetch('/api/thinkers/upload-image', { method: 'POST', body: fd })
+  if (!r.ok) {
+    const detail = await r.json().catch(() => ({ detail: 'Upload failed' }))
+    throw new Error(detail.detail || 'Upload failed')
+  }
+  const data = (await r.json()) as { url: string }
+  return data.url
+}
+
 // The backend exposes POST /api/thinkers/entries/{id}/refetch-image but no UI
 // currently triggers it. When a "refresh image" affordance is added, the
 // corresponding fetch helper goes here.
@@ -299,8 +311,8 @@ function EntryCard({ entry, onEdit, onDelete, onVisit }: EntryCardProps) {
 
 // ─────────────────────── EntryForm ───────────────────────
 
-// Small preview used inside EntryForm to show what the avatar will look like
-// as the user pastes an image URL. Same fallback logic as EntryCard's avatar.
+// Small preview used inside ImageField to show what the avatar will look
+// like. Same fallback logic as EntryCard's avatar.
 function ImagePreview({ url, name }: { url: string; name: string }) {
   const [failed, setFailed] = useState(false)
   const mono = monogram(name || '?')
@@ -319,6 +331,99 @@ function ImagePreview({ url, name }: { url: string; name: string }) {
       onLoad={() => setFailed(false)}
       className="shrink-0 w-10 h-10 rounded-full object-cover bg-slate-100"
     />
+  )
+}
+
+// Image picker that combines three input methods:
+//   - paste a URL into the text input
+//   - click the avatar to open the file chooser
+//   - drag-drop an image file onto the row
+// The whole row is the drop zone so dragging anywhere along it works.
+function ImageField({
+  url,
+  name,
+  onChange,
+}: {
+  url: string
+  name: string
+  onChange: (url: string) => void
+}) {
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return
+    setError(null)
+    setUploading(true)
+    try {
+      const newUrl = await uploadImage(files[0])
+      onChange(newUrl)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div
+      onDragOver={(e) => {
+        // Only react if a file is being dragged (not text selection etc.)
+        if (!e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        if (!isDragging) setIsDragging(true)
+      }}
+      onDragLeave={(e) => {
+        // Avoid flicker when hovering over inner elements.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+        setIsDragging(false)
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        setIsDragging(false)
+        handleFiles(e.dataTransfer.files)
+      }}
+      className={`flex items-center gap-3 p-2 -m-2 rounded-lg border-2 border-dashed transition-colors ${
+        isDragging ? 'border-sky-500 bg-sky-50' : 'border-transparent'
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        className="relative group shrink-0"
+        aria-label="Choose an image"
+      >
+        <ImagePreview url={url} name={name} />
+        <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <i className="ti ti-camera text-white text-sm" aria-hidden />
+        </div>
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => handleFiles(e.target.files)}
+        className="hidden"
+      />
+      <div className="flex-1 min-w-0">
+        <input
+          type="text"
+          value={url}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Image URL — or drag-drop / click the avatar"
+          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-500"
+        />
+        {uploading && (
+          <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
+            <i className="ti ti-loader-2 animate-spin" aria-hidden /> Uploading...
+          </div>
+        )}
+        {error && <div className="text-xs text-rose-600 mt-1">{error}</div>}
+      </div>
+    </div>
   )
 }
 
@@ -448,17 +553,11 @@ function EntryForm({ initial, submitting, submitError, onSubmit, onCancel }: Ent
         placeholder="Primary URL (required)"
         className={inputCls}
       />
-      <div className="flex items-center gap-3">
-        {/* Live preview — img with fallback to monogram if URL is empty or fails to load. */}
-        <ImagePreview url={draft.image_url} name={draft.name} />
-        <input
-          type="text"
-          value={draft.image_url}
-          onChange={(e) => setDraft({ ...draft, image_url: e.target.value })}
-          placeholder="Image URL (blank → monogram)"
-          className={inputCls}
-        />
-      </div>
+      <ImageField
+        url={draft.image_url}
+        name={draft.name}
+        onChange={(url) => setDraft({ ...draft, image_url: url })}
+      />
       <input
         type="text"
         value={draft.blurb}

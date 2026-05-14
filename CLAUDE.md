@@ -254,6 +254,28 @@ Restore with `./bin/restore` (interactive or by path).
 
 ---
 
+## File uploads
+
+User-uploaded images for the Thinkers tab go into
+`backend/uploads/thinkers/<uuid>.<ext>`. `main.py` mounts the parent
+`backend/uploads/` at `/uploads/` via `StaticFiles`, and Vite proxies
+that path to the backend in dev. Vite-side: see `vite.config.ts` for
+the `/uploads` proxy entry. The upload endpoint is
+`POST /api/thinkers/upload-image` (multipart `file=`), enforces a
+5MB cap and a small allowed-extension list, and returns `{url}` —
+the FE then PATCHes the entry's `image_url` with that URL (or
+includes it in the create payload).
+
+The `uploads/` directory is gitignored. On a fresh clone there are
+no files; entries with `image_url` pointing into `/uploads/` will
+fall back to monogram (broken-image → `onError` → monogram in
+`EntryCard`). If you ever need to migrate uploads between machines,
+copy `backend/uploads/` alongside the DB.
+
+If another tab later wants user uploads, follow the same pattern: a
+dedicated `POST /api/<tab>/upload-*` endpoint that writes into
+`backend/uploads/<tab>/`, served by the same `/uploads` mount.
+
 ## Files-of-interest map
 
 ```

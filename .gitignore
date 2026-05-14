@@ -4,6 +4,7 @@ lbs.db
 lbs.db-*
 lbs.db.*
 backups/
+uploads/
 __pycache__
 .venv
 venv

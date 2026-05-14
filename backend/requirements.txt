@@ -4,3 +4,4 @@ pydantic
 sqlmodel
 httpx
 beautifulsoup4
+python-multipart

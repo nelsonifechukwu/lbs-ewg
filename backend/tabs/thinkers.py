@@ -1,15 +1,28 @@
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, Session, SQLModel, select
 
 from db import engine
+
+
+# ─────────────────────── upload storage ───────────────────────
+# Uploaded images land here; main.py mounts the parent directory at
+# /uploads/ so files are reachable at /uploads/thinkers/<name>.
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads" / "thinkers"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+ALLOWED_EXTS = {"png", "jpg", "jpeg", "gif", "webp", "svg"}
 
 
 # ─────────────────────── table ───────────────────────
@@ -114,6 +127,32 @@ async def fetch_image_url(primary_url: str) -> str | None:
 
 
 router = APIRouter(prefix="/api/thinkers", tags=["thinkers"])
+
+
+@router.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)) -> dict:
+    """Save a user-uploaded image and return a URL the FE can drop straight
+    into image_url. Not bound to a specific entry — the caller decides which
+    entry (or which Add draft) the URL belongs to.
+    """
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "Not an image")
+    contents = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "Image too large (max 5MB)")
+    if not contents:
+        raise HTTPException(400, "Empty file")
+    # Derive a safe extension from the upload's filename; default to a generic
+    # 'img' if it's weird or missing. The filename itself is discarded — we
+    # always rename to a UUID to avoid collisions and path-traversal tricks.
+    ext = "img"
+    if file.filename and "." in file.filename:
+        candidate = file.filename.rsplit(".", 1)[-1].lower()
+        if candidate in ALLOWED_EXTS:
+            ext = candidate
+    name = f"{uuid.uuid4().hex}.{ext}"
+    (UPLOAD_DIR / name).write_bytes(contents)
+    return {"url": f"/uploads/thinkers/{name}"}
 
 
 @router.get("/entries")
