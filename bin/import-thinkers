@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""Bulk-import bookmark URLs into the Thinkers tab.
+
+Reads a file (markdown, plain text, browser HTML export, etc.), extracts every
+http(s) URL, infers a name and entry_type from each, and POSTs to
+/api/thinkers/entries. Requires the backend to be running on :8000.
+
+Usage:
+    bin/import-thinkers <path-to-file>
+    bin/import-thinkers <path-to-file> --concurrency 8
+
+The og:image fetch happens server-side per request and can take a few seconds
+each, so the script POSTs concurrently (default 5 workers). Already-present
+titles are silently skipped (server returns 409, the script reports it).
+
+Inferred names are best-effort from the URL alone — most entries will need a
+quick edit in the UI to set a real name. The entry_type is inferred per host:
+youtube → channel (or 'talk' for /watch URLs), arxiv/pdf → paper, substack →
+newsletter, medium → blog, everything else → person.
+"""
+
+import argparse
+import json
+import re
+import sys
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from urllib.parse import urlparse
+
+API = "http://localhost:8000/api/thinkers/entries"
+
+
+def infer_type(url: str) -> str:
+    try:
+        u = urlparse(url)
+        host = (u.hostname or "").lower().removeprefix("www.")
+        path = u.path.lower()
+        if host == "youtu.be" or "youtube.com" in host:
+            return "talk" if (host == "youtu.be" or "/watch" in path) else "channel"
+        if path.endswith(".pdf"):
+            return "paper"
+        if "arxiv.org" in host:
+            return "paper"
+        if "substack.com" in host:
+            return "newsletter"
+        if host == "medium.com":
+            return "blog"
+    except Exception:
+        pass
+    return "person"
+
+
+def infer_name(url: str) -> str:
+    try:
+        u = urlparse(url)
+        host = (u.hostname or "").lower().removeprefix("www.")
+        parts = [p for p in u.path.strip("/").split("/") if p]
+
+        # LinkedIn: /in/<slug>/ — the slug usually IS the person's name in
+        # kebab-case. Reverse it.
+        if "linkedin.com" in host and len(parts) >= 2 and parts[0] == "in":
+            slug = parts[1]
+            return " ".join(p.capitalize() for p in slug.split("-"))
+
+        # GitHub: first path segment is the username.
+        if host == "github.com" and parts:
+            return parts[0]
+
+        # YouTube: /@channel
+        if "youtube.com" in host and parts and parts[0].startswith("@"):
+            return parts[0][1:]
+
+        # Medium: @username
+        if host == "medium.com" and parts and parts[0].startswith("@"):
+            return parts[0][1:]
+
+        # Substack: hostname stem is the publisher.
+        if "substack.com" in host:
+            return host.split(".")[0]
+
+        if host == "scholar.google.com":
+            return "Google Scholar profile"
+
+        # Generic fallback: main label of the hostname, with a small hop
+        # for subdomain-style sites (blog.gregbrockman.com → gregbrockman).
+        labels = host.split(".")
+        stem = labels[0]
+        if stem in ("blog", "www", "medium", "magazine") and len(labels) > 1:
+            stem = labels[-2]
+        return stem or url
+    except Exception:
+        return url
+
+
+def extract_urls(text: str) -> list[str]:
+    raw = re.findall(r"https?://\S+", text)
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for r in raw:
+        r = r.rstrip(".,);]>\"' \t\n")
+        if r and r not in seen:
+            seen.add(r)
+            cleaned.append(r)
+    return cleaned
+
+
+def post_entry(payload: dict) -> tuple[bool, str, int | None]:
+    """Returns (success, message, server_id_if_created)."""
+    req = urllib.request.Request(
+        API,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+            img_marker = "✓" if data.get("image_url") else "·"
+            return True, f"id={data['id']} img={img_marker}", data.get("id")
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read())
+            detail = body.get("detail", e.reason)
+        except Exception:
+            detail = e.reason
+        return False, f"HTTP {e.code}: {detail}", None
+    except Exception as e:
+        return False, type(e).__name__ + ": " + str(e), None
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(
+        description="Bulk-import bookmarks into the Thinkers tab.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument("path", type=Path, help="File containing URLs")
+    p.add_argument(
+        "--concurrency",
+        type=int,
+        default=5,
+        help="Number of POSTs in flight at once (default 5)",
+    )
+    args = p.parse_args()
+
+    if not args.path.exists():
+        print(f"No file at {args.path}", file=sys.stderr)
+        return 1
+
+    text = args.path.read_text()
+    urls = extract_urls(text)
+    print(f"Found {len(urls)} unique URLs in {args.path}")
+    print()
+
+    payloads = [
+        {
+            "entry_type": infer_type(url),
+            "name": infer_name(url),
+            "primary_url": url,
+        }
+        for url in urls
+    ]
+
+    ok = 0
+    fail = 0
+    with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
+        future_to_idx = {
+            ex.submit(post_entry, payload): i
+            for i, payload in enumerate(payloads)
+        }
+        done = 0
+        for fut in as_completed(future_to_idx):
+            done += 1
+            idx = future_to_idx[fut]
+            payload = payloads[idx]
+            success, msg, _ = fut.result()
+            symbol = "✓" if success else "✗"
+            print(
+                f"  [{done:3d}/{len(urls)}] {symbol} "
+                f"{payload['entry_type']:10s} "
+                f"{payload['name'][:28]:28s} "
+                f"{payload['primary_url'][:60]:60s} → {msg}"
+            )
+            if success:
+                ok += 1
+            else:
+                fail += 1
+
+    print()
+    print(f"Done: {ok} created, {fail} failed.")
+    return 0 if fail == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
