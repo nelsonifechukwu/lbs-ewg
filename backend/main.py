@@ -11,7 +11,6 @@ import search
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    thinkers.init_table()  # raw-sqlite3 tab; its table isn't in SQLModel.metadata
     yield
 
 

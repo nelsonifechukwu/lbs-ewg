@@ -4,16 +4,20 @@ A personal life-management app. One tab per area of life (currently:
 dissertation, jobs, thinkers — more will be added). Single user, single
 machine, single source of truth (`backend/lbs.db`).
 
-**Tabs don't have to be identical mirrors.** Dissertation and Jobs are
-to-do lists with shared shape (title/done/position) and use SQLModel.
-Thinkers is a richer card grid (open-ended `entry_type` like person /
-channel / podcast / book / ..., with images, tags, external links,
-last-visited tracking) and uses **plain sqlite3 with inline SQL**
-because its schema (JSON-encoded links, nullable image_url, async
-image fetch on create) reads more clearly as raw SQL than as ORM.
-The "self-contained per tab" principle accommodates this: each tab
-picks the storage style that fits its shape, as long as the file stays
-readable top-to-bottom.
+**Every tab uses SQLModel.** Dissertation and Jobs are to-do lists
+with shared shape (title/done/position). Thinkers is a richer card
+grid (open-ended `entry_type` like person / channel / podcast / book /
+..., with images, external links, last-visited tracking), but its
+storage layer follows the same SQLModel pattern. Tabs can differ in
+shape; they should not differ in *how* they talk to the database.
+
+> An earlier version of this doc said raw sqlite3 was OK when a
+> tab's schema "reads more clearly as raw SQL". That carve-out was
+> dropped — the inconsistency between Thinkers and the other tabs
+> made it harder for a new contributor to learn one pattern and
+> apply it everywhere. The richer schema (JSON-encoded links via
+> `sa_column=Column(JSON)`, nullable image_url, async image fetch
+> from the route handler) all fits cleanly into SQLModel.
 
 `Thinkers.entry_type` is intentionally an open string (no CHECK
 constraint in SQL, `type EntryType = string` in TS). `TYPE_META` in
