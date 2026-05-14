@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 pydantic
 sqlmodel
+httpx
+beautifulsoup4

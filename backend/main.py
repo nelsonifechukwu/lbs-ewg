@@ -4,13 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from db import init_db
-from tabs import dissertation, jobs  # noqa: F401  (import registers SQLModel tables)
+from tabs import dissertation, jobs, thinkers  # noqa: F401  (import registers SQLModel tables)
 import search
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    thinkers.init_table()  # raw-sqlite3 tab; its table isn't in SQLModel.metadata
     yield
 
 
@@ -26,4 +27,5 @@ app.add_middleware(
 
 app.include_router(dissertation.router)
 app.include_router(jobs.router)
+app.include_router(thinkers.router)
 app.include_router(search.router)

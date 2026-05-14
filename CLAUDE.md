@@ -1,8 +1,18 @@
 # LBS — project context for Claude
 
-A personal life-management app. Sortable to-do lists, one per area of life
-(currently: dissertation, jobs — more will be added). Single user, single
+A personal life-management app. One tab per area of life (currently:
+dissertation, jobs, thinkers — more will be added). Single user, single
 machine, single source of truth (`backend/lbs.db`).
+
+**Tabs don't have to be identical mirrors.** Dissertation and Jobs are
+to-do lists with shared shape (title/done/position) and use SQLModel.
+Thinkers is a richer card grid (people and channels with images, tags,
+external links, last-visited tracking) and uses **plain sqlite3 with
+inline SQL** because its schema (JSON-encoded links, nullable
+image_url, async image fetch on create) reads more clearly as raw SQL
+than as ORM. The "self-contained per tab" principle accommodates this:
+each tab picks the storage style that fits its shape, as long as the
+file stays readable top-to-bottom.
 
 This file is the load-bearing summary of how this project is built. When
 the project's paradigms change, **update this file in the same commit** so
@@ -87,9 +97,9 @@ clarity, and it's the right trade for this codebase.
 Three places list every tab. Adding a tab means touching exactly these
 three plus the two new tab files:
 
-1. **`backend/main.py`** — `app.include_router(...)` for the new router
-2. **`backend/search.py`** — the `TABS = [(id, label, Model), ...]` list (used by `/api/search` and could power any future cross-tab feature)
-3. **`frontend/src/tabs/registry.ts`** — the `tabs = [...]` array with `name`, `icon`, `path`, `listUrl`, `Component`
+1. **`backend/main.py`** — `app.include_router(...)` for the new router (and `tab_module.init_table()` in the lifespan if the tab uses raw sqlite3 instead of SQLModel)
+2. **`backend/search.py`** — the `TABS = [(id, label, Model), ...]` list (SQLModel tabs only — title-based search is task-shaped; tabs without a `title` column simply don't participate)
+3. **`frontend/src/tabs/registry.ts`** — the `tabs = [...]` array with `name`, `icon`, `path`, `listUrl`, `Component`, and optionally `progress: false` if items have no `done` state (excludes the tab from the landing page aggregate)
 
 The landing page (`frontend/src/LandingPage.tsx`) and the sidebar in
 `App.tsx` read from the frontend registry, so they pick up new tabs
@@ -126,6 +136,15 @@ pattern is in `backend/db.py::_migrate()`: an idempotent
 - **No modals anywhere.** Inline banners between the input and the list, or pill-state buttons.
 
 ---
+
+## Icons
+
+The chrome (sidebar in `App.tsx`, landing-page rows in `LandingPage.tsx`)
+renders icons polymorphically: a tab's `icon` field can be either an
+emoji (`'📚'`, `'💼'`) or a Tabler icon class string starting with `ti-`
+(`'ti-bulb'`). Tabler classes resolve via the `@tabler/icons-webfont` CSS
+imported once in `main.tsx`. Inside a tab component, use Tabler classes
+directly: `<i className="ti ti-search" aria-hidden />`.
 
 ## Color palette — keep this consistent
 

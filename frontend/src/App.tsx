@@ -2,6 +2,14 @@ import { Link, NavLink, Route, Routes } from 'react-router-dom'
 import LandingPage from './LandingPage'
 import { tabs } from './tabs/registry'
 
+// Render either a Tabler icon class (e.g. "ti-bulb") as an <i>, or any other
+// string (an emoji like "📚") as plain text. Lets registry entries use either
+// convention without coupling the chrome to one icon system.
+function renderIcon(icon: string) {
+  if (icon.startsWith('ti-')) return <i className={`ti ${icon}`} aria-hidden />
+  return <>{icon}</>
+}
+
 export default function App() {
   return (
     <div className="flex min-h-screen bg-stone-50 text-slate-700">
@@ -25,7 +33,7 @@ export default function App() {
                 }`
               }
             >
-              <span className="text-base">{tab.icon}</span>
+              <span className="text-base">{renderIcon(tab.icon)}</span>
               <span>{tab.name}</span>
             </NavLink>
           ))}

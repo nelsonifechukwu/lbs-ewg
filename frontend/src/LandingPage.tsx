@@ -10,12 +10,24 @@ type TabStats = {
   total: number
 }
 
+// Same helper as in App.tsx — small enough that one copy in each chrome file
+// beats a shared util module per this project's "duplication > abstraction"
+// preference.
+function renderIcon(icon: string) {
+  if (icon.startsWith('ti-')) return <i className={`ti ${icon}`} aria-hidden />
+  return <>{icon}</>
+}
+
 export default function LandingPage() {
   const [stats, setStats] = useState<TabStats[] | null>(null)
 
+  // Only tabs with progress semantics contribute to the aggregate. Thinkers
+  // has no "done" state, so it sets progress: false in the registry.
+  const progressTabs = tabs.filter((t) => t.progress !== false)
+
   useEffect(() => {
     Promise.all(
-      tabs.map(async (t) => {
+      progressTabs.map(async (t) => {
         const r = await fetch(t.listUrl)
         const items = (await r.json()) as Array<{ done: boolean }>
         return {
@@ -29,6 +41,7 @@ export default function LandingPage() {
     )
       .then(setStats)
       .catch(console.error)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const total = (stats ?? []).reduce((s, x) => s + x.total, 0)
@@ -67,7 +80,7 @@ export default function LandingPage() {
                 to={s.path}
                 className="flex items-center gap-4 px-4 py-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50"
               >
-                <span className="text-lg">{s.icon}</span>
+                <span className="text-lg">{renderIcon(s.icon)}</span>
                 <span className="text-sm font-medium text-slate-700 w-32">
                   {s.name}
                 </span>
