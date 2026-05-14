@@ -202,6 +202,9 @@ function EntryCard({ entry, onEdit, onDelete, onVisit }: EntryCardProps) {
       tabIndex={0}
       onClick={openPrimary}
       onKeyDown={(e) => {
+        // Only handle key events landing on the card itself — not events
+        // bubbling up from a focused inner button (edit/delete/link icon).
+        if (e.target !== e.currentTarget) return
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
           openPrimary()
@@ -297,11 +300,12 @@ function EntryCard({ entry, onEdit, onDelete, onVisit }: EntryCardProps) {
 type EntryFormProps = {
   initial?: Entry
   submitting: boolean
+  submitError?: string | null
   onSubmit: (draft: EntryDraft) => void
   onCancel: () => void
 }
 
-function EntryForm({ initial, submitting, onSubmit, onCancel }: EntryFormProps) {
+function EntryForm({ initial, submitting, submitError, onSubmit, onCancel }: EntryFormProps) {
   const [draft, setDraft] = useState<EntryDraft>({
     entry_type: initial?.entry_type ?? 'person',
     name: initial?.name ?? '',
@@ -324,18 +328,23 @@ function EntryForm({ initial, submitting, onSubmit, onCancel }: EntryFormProps) 
       setError('Name is required')
       return
     }
-    if (!draft.primary_url.trim()) {
+    let url = draft.primary_url.trim()
+    if (!url) {
       setError('Primary URL is required')
       return
     }
+    // Friendly default: paste "karpathy.ai" and it becomes "https://karpathy.ai".
+    if (!/^https?:\/\//i.test(url)) {
+      url = 'https://' + url
+    }
     try {
-      new URL(draft.primary_url)
+      new URL(url)
     } catch {
       setError('Primary URL is not a valid URL')
       return
     }
     setError(null)
-    onSubmit(draft)
+    onSubmit({ ...draft, primary_url: url })
   }
 
   // If the current type is custom (not a TYPE_META key) or empty, fall back
@@ -435,7 +444,9 @@ function EntryForm({ initial, submitting, onSubmit, onCancel }: EntryFormProps) 
         className={inputCls}
       />
 
-      {error && <div className="text-xs text-rose-600">{error}</div>}
+      {(error || submitError) && (
+        <div className="text-xs text-rose-600">{error || submitError}</div>
+      )}
 
       <div className="flex items-center justify-end gap-2 pt-2">
         <button
@@ -479,6 +490,7 @@ export default function ThinkersTab() {
   const [typeFilter, setTypeFilter] = useState<'all' | EntryType>('all')
   const [sort, setSort] = useState<'recently_added' | 'recently_visited'>('recently_added')
   const [modal, setModal] = useState<Modal>({ kind: 'closed' })
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -566,6 +578,7 @@ export default function ThinkersTab() {
   }
 
   async function handleAddSubmit(draft: EntryDraft) {
+    setSubmitError(null)
     setModal({ kind: 'add', submitting: true })
     try {
       const created = await createEntry(draftToPayload(draft))
@@ -573,6 +586,7 @@ export default function ThinkersTab() {
       setModal({ kind: 'closed' })
     } catch (err) {
       console.error(err)
+      setSubmitError(err instanceof Error ? err.message : 'Failed to save')
       setModal({ kind: 'add', submitting: false })
     }
   }
@@ -580,6 +594,7 @@ export default function ThinkersTab() {
   async function handleEditSubmit(draft: EntryDraft) {
     if (modal.kind !== 'edit') return
     const target = modal.entry
+    setSubmitError(null)
     setModal({ kind: 'edit', entry: target, submitting: true })
     try {
       const updated = await updateEntry(target.id, draftToPayload(draft))
@@ -587,9 +602,15 @@ export default function ThinkersTab() {
       setModal({ kind: 'closed' })
     } catch (err) {
       console.error(err)
+      setSubmitError(err instanceof Error ? err.message : 'Failed to save')
       setModal({ kind: 'edit', entry: target, submitting: false })
     }
   }
+
+  // Reset transient state whenever a modal closes / a new one opens.
+  useEffect(() => {
+    if (modal.kind === 'closed') setSubmitError(null)
+  }, [modal.kind])
 
   async function handleDelete(id: number) {
     try {
@@ -614,7 +635,7 @@ export default function ThinkersTab() {
     <div className="max-w-5xl mx-auto px-8 py-8">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold text-slate-700">Thinkers</h1>
-        <p className="text-sm text-slate-500 mt-1">people and channels that fuel me</p>
+        <p className="text-sm text-slate-500 mt-1">voices that fuel me</p>
       </header>
 
       <div className="flex items-center gap-2 mb-4">
@@ -704,10 +725,11 @@ export default function ThinkersTab() {
             if (e.target === e.currentTarget) setModal({ kind: 'closed' })
           }}
         >
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-lg">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-lg max-h-[90vh] overflow-y-auto">
             <EntryForm
               initial={modal.kind === 'edit' ? modal.entry : undefined}
               submitting={modal.submitting}
+              submitError={submitError}
               onSubmit={modal.kind === 'add' ? handleAddSubmit : handleEditSubmit}
               onCancel={() => setModal({ kind: 'closed' })}
             />
