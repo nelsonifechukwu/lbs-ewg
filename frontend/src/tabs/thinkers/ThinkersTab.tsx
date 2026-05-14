@@ -316,6 +316,10 @@ function EntryForm({ initial, submitting, onSubmit, onCancel }: EntryFormProps) 
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    if (!draft.entry_type.trim()) {
+      setError('Type is required')
+      return
+    }
     if (!draft.name.trim()) {
       setError('Name is required')
       return
@@ -334,6 +338,13 @@ function EntryForm({ initial, submitting, onSubmit, onCancel }: EntryFormProps) 
     onSubmit(draft)
   }
 
+  // If the current type is custom (not a TYPE_META key) or empty, fall back
+  // to a text input. Otherwise show the select with an "Other..." escape
+  // hatch that drops the user into the text input.
+  const isCustomType =
+    draft.entry_type !== '' && !(draft.entry_type in TYPE_META)
+  const showTypeAsText = isCustomType || draft.entry_type === ''
+
   const inputCls =
     'w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-500'
 
@@ -344,19 +355,47 @@ function EntryForm({ initial, submitting, onSubmit, onCancel }: EntryFormProps) 
       </h2>
 
       <div>
-        <input
-          type="text"
-          list="entry-types"
-          value={draft.entry_type}
-          onChange={(e) => setDraft({ ...draft, entry_type: e.target.value })}
-          placeholder="Type (person, channel, podcast, book, ...)"
-          className={inputCls}
-        />
-        <datalist id="entry-types">
-          {Object.keys(TYPE_META).map((t) => (
-            <option key={t} value={t} />
-          ))}
-        </datalist>
+        <label className="block text-xs text-slate-500 mb-1">Type</label>
+        {showTypeAsText ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={draft.entry_type}
+              onChange={(e) =>
+                setDraft({ ...draft, entry_type: e.target.value })
+              }
+              placeholder="Custom type (e.g. workshop, thread)"
+              className={inputCls}
+            />
+            <button
+              type="button"
+              onClick={() => setDraft({ ...draft, entry_type: 'person' })}
+              className="text-xs text-slate-500 hover:text-slate-700 whitespace-nowrap"
+            >
+              ← standard types
+            </button>
+          </div>
+        ) : (
+          <select
+            value={draft.entry_type}
+            onChange={(e) => {
+              if (e.target.value === '__custom') {
+                // Drop into the text-input branch with an empty value.
+                setDraft({ ...draft, entry_type: '' })
+              } else {
+                setDraft({ ...draft, entry_type: e.target.value })
+              }
+            }}
+            className={inputCls}
+          >
+            {Object.entries(TYPE_META).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v.label}
+              </option>
+            ))}
+            <option value="__custom">Other (specify)...</option>
+          </select>
+        )}
       </div>
 
       <input
