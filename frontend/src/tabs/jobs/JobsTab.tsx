@@ -427,7 +427,7 @@ function SortableRow({
         type="checkbox"
         checked={app.done}
         onChange={onToggle}
-        className="w-4 h-4 accent-sky-600 cursor-pointer"
+        className="w-4 h-4 accent-emerald-600 cursor-pointer"
       />
       {editing ? (
         <div
