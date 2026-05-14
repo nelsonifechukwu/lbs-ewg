@@ -29,6 +29,7 @@ type EntryDraft = {
   entry_type: EntryType
   name: string
   primary_url: string
+  image_url: string  // empty string ↔ "no override" / use monogram
   blurb: string
   why: string
   other_links: string  // textarea raw — split on newlines at submit
@@ -119,6 +120,7 @@ type CreatePayload = {
   entry_type: EntryType
   name: string
   primary_url: string
+  image_url?: string
   blurb: string
   why: string
   links: string[]
@@ -136,7 +138,7 @@ async function createEntry(payload: CreatePayload): Promise<Entry> {
 
 async function updateEntry(
   id: number,
-  patch: Partial<Pick<Entry, 'entry_type' | 'name' | 'blurb' | 'why' | 'primary_url' | 'links'>>,
+  patch: Partial<Pick<Entry, 'entry_type' | 'name' | 'blurb' | 'why' | 'primary_url' | 'image_url' | 'links'>>,
 ): Promise<Entry> {
   const r = await fetch(`/api/thinkers/entries/${id}`, {
     method: 'PATCH',
@@ -297,6 +299,29 @@ function EntryCard({ entry, onEdit, onDelete, onVisit }: EntryCardProps) {
 
 // ─────────────────────── EntryForm ───────────────────────
 
+// Small preview used inside EntryForm to show what the avatar will look like
+// as the user pastes an image URL. Same fallback logic as EntryCard's avatar.
+function ImagePreview({ url, name }: { url: string; name: string }) {
+  const [failed, setFailed] = useState(false)
+  const mono = monogram(name || '?')
+  const showMonogram = !url || failed
+  return showMonogram ? (
+    <div
+      className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${mono.bg} ${mono.fg}`}
+    >
+      {mono.letters}
+    </div>
+  ) : (
+    <img
+      src={url}
+      alt=""
+      onError={() => setFailed(true)}
+      onLoad={() => setFailed(false)}
+      className="shrink-0 w-10 h-10 rounded-full object-cover bg-slate-100"
+    />
+  )
+}
+
 type EntryFormProps = {
   initial?: Entry
   submitting: boolean
@@ -310,6 +335,7 @@ function EntryForm({ initial, submitting, submitError, onSubmit, onCancel }: Ent
     entry_type: initial?.entry_type ?? 'person',
     name: initial?.name ?? '',
     primary_url: initial?.primary_url ?? '',
+    image_url: initial?.image_url ?? '',
     blurb: initial?.blurb ?? '',
     why: initial?.why ?? '',
     other_links: (initial?.links ?? []).join('\n'),
@@ -422,6 +448,17 @@ function EntryForm({ initial, submitting, submitError, onSubmit, onCancel }: Ent
         placeholder="Primary URL (required)"
         className={inputCls}
       />
+      <div className="flex items-center gap-3">
+        {/* Live preview — img with fallback to monogram if URL is empty or fails to load. */}
+        <ImagePreview url={draft.image_url} name={draft.name} />
+        <input
+          type="text"
+          value={draft.image_url}
+          onChange={(e) => setDraft({ ...draft, image_url: e.target.value })}
+          placeholder="Image URL (blank → monogram)"
+          className={inputCls}
+        />
+      </div>
       <input
         type="text"
         value={draft.blurb}
@@ -577,6 +614,9 @@ export default function ThinkersTab() {
       entry_type: draft.entry_type,
       name: draft.name.trim(),
       primary_url: draft.primary_url.trim(),
+      // Send "" to clear, a URL to override, or omit by sending undefined.
+      // Backend treats "" as "clear" (image_url = NULL → monogram fallback).
+      image_url: draft.image_url.trim(),
       blurb: draft.blurb.trim(),
       why: draft.why.trim(),
       links,

@@ -77,6 +77,9 @@ class EntryCreate(BaseModel):
     primary_url: str
     blurb: str = ""
     why: str = ""
+    # If provided on create, the server uses it verbatim and skips the
+    # og:image fetch. If omitted/empty, the server scrapes the primary_url.
+    image_url: Optional[str] = None
     tags: str = ""
     links: list[str] = Field(default_factory=list)
 
@@ -87,6 +90,8 @@ class EntryUpdate(BaseModel):
     blurb: Optional[str] = None
     why: Optional[str] = None
     primary_url: Optional[str] = None
+    # Pass a URL to override, or "" to clear (renders as monogram).
+    image_url: Optional[str] = None
     tags: Optional[str] = None
     links: Optional[list[str]] = None
 
@@ -183,7 +188,9 @@ def list_entries() -> list[Entry]:
 
 @router.post("/entries")
 async def create_entry(payload: EntryCreate) -> Entry:
-    image_url = await fetch_image_url(payload.primary_url)
+    # If the caller pasted a specific image URL, respect it and skip the
+    # scrape. Empty string is treated the same as not provided.
+    image_url = payload.image_url or await fetch_image_url(payload.primary_url)
     now = _now()
     conn = _conn()
     try:
@@ -235,6 +242,11 @@ def update_entry(entry_id: int, payload: EntryUpdate) -> Entry:
     if payload.primary_url is not None:
         sets.append("primary_url = ?")
         values.append(payload.primary_url)
+    if payload.image_url is not None:
+        # Empty string clears the override → falls back to monogram on the FE.
+        # Non-empty string is used verbatim (no scrape).
+        sets.append("image_url = ?")
+        values.append(payload.image_url or None)
     if payload.tags is not None:
         sets.append("tags = ?")
         values.append(payload.tags)
