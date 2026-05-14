@@ -488,7 +488,9 @@ export default function ThinkersTab() {
   const [loadError, setLoadError] = useState(false)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<'all' | EntryType>('all')
-  const [sort, setSort] = useState<'recently_added' | 'recently_visited'>('recently_added')
+  const [sort, setSort] = useState<
+    'recently_added' | 'recently_visited' | 'least_recently_visited'
+  >('recently_added')
   const [modal, setModal] = useState<Modal>({ kind: 'closed' })
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -546,11 +548,15 @@ export default function ThinkersTab() {
       )
     }
     const sorted = [...result]
-    if (sort === 'recently_visited') {
-      // Nulls last; most recent first within the visited group.
+    if (sort === 'recently_visited' || sort === 'least_recently_visited') {
+      // Both visit-based sorts put never-visited (null) at the end — the
+      // user picks these sorts when they care specifically about visits.
+      const desc = sort === 'recently_visited'
       sorted.sort((a, b) => {
         if (a.last_visited_at && b.last_visited_at) {
-          return b.last_visited_at.localeCompare(a.last_visited_at)
+          return desc
+            ? b.last_visited_at.localeCompare(a.last_visited_at)
+            : a.last_visited_at.localeCompare(b.last_visited_at)
         }
         if (a.last_visited_at) return -1
         if (b.last_visited_at) return 1
@@ -667,12 +673,18 @@ export default function ThinkersTab() {
         <select
           value={sort}
           onChange={(e) =>
-            setSort(e.target.value as 'recently_added' | 'recently_visited')
+            setSort(
+              e.target.value as
+                | 'recently_added'
+                | 'recently_visited'
+                | 'least_recently_visited',
+            )
           }
           className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-sky-500"
         >
           <option value="recently_added">Recently added</option>
           <option value="recently_visited">Recently visited</option>
+          <option value="least_recently_visited">Least recently visited</option>
         </select>
         <button
           type="button"
