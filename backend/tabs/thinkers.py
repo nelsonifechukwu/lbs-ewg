@@ -2,7 +2,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -127,7 +127,14 @@ async def fetch_image_url(primary_url: str) -> Optional[str]:
         if tag is None:
             return None
         content = tag.get("content")
-        return str(content) if content else None
+        if not content:
+            return None
+        # Many sites publish og:image as a path relative to the page
+        # (e.g. "/static/og.png", "../assets/x.jpg"). Resolve it against the
+        # final response URL so we always store an absolute URL — otherwise
+        # the browser fetches it from the FE origin and the request 404s
+        # (or trips Vite's /public/ warning).
+        return urljoin(str(r.url), str(content))
     except Exception:
         return None
 
