@@ -602,22 +602,18 @@ export default function ThinkersTab() {
             className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-500"
           />
         </div>
-        <div className="flex bg-slate-100 rounded-lg p-0.5 flex-wrap">
-          {(['all', ...distinctTypes] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setTypeFilter(f)}
-              className={`px-3 py-1 text-xs rounded-md ${
-                typeFilter === f
-                  ? 'bg-white text-slate-700 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {f === 'all' ? 'All' : typeMeta(f).label}
-            </button>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-sky-500"
+        >
+          <option value="all">All types</option>
+          {distinctTypes.map((t) => (
+            <option key={t} value={t}>
+              {typeMeta(t).label}
+            </option>
           ))}
-        </div>
+        </select>
         <select
           value={sort}
           onChange={(e) =>
