@@ -166,9 +166,10 @@ type EntryCardProps = {
   entry: Entry
   onEdit: () => void
   onDelete: () => void
+  onVisit: () => void
 }
 
-function EntryCard({ entry, onEdit, onDelete }: EntryCardProps) {
+function EntryCard({ entry, onEdit, onDelete, onVisit }: EntryCardProps) {
   const [imgFailed, setImgFailed] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   useEffect(() => {
@@ -182,9 +183,7 @@ function EntryCard({ entry, onEdit, onDelete }: EntryCardProps) {
   const meta = typeMeta(entry.entry_type)
 
   function openPrimary() {
-    visitEntry(entry.id).catch(() => {
-      /* fire-and-forget; failure to record a visit shouldn't block opening */
-    })
+    onVisit()  // parent updates local state optimistically and fires the API call
     window.open(entry.primary_url, '_blank', 'noopener')
   }
 
@@ -570,6 +569,16 @@ export default function ThinkersTab() {
     }
   }
 
+  // Optimistic visit: bump last_visited_at locally so the card sorts and
+  // displays correctly right away, then fire-and-forget the API call.
+  function handleVisit(id: number) {
+    const now = new Date().toISOString()
+    setEntries((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, last_visited_at: now } : e)),
+    )
+    visitEntry(id).catch(console.error)
+  }
+
   return (
     <div className="max-w-5xl mx-auto px-8 py-8">
       <header className="mb-6">
@@ -655,6 +664,7 @@ export default function ThinkersTab() {
                 setModal({ kind: 'edit', entry, submitting: false })
               }
               onDelete={() => handleDelete(entry.id)}
+              onVisit={() => handleVisit(entry.id)}
             />
           ))}
         </div>
