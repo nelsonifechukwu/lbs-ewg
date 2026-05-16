@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Bulk-import the lifelonglearning.xlsx pile into the Learning tab.
+
+Reads every non-empty cell from row 5 downward across the 12 active columns
+of the "DTASK PILE" sheet and POSTs each as a Learning item to the running
+backend at http://localhost:8000.
+
+The xlsx structure (one sheet, "DTASK PILE"):
+- Row 4 holds the verbose column headers ("Softare (Bkend) PROJECTS",
+  "AI Projects", etc.) — we map each to a short lowercase category slug.
+- Row 5+ are items, one per cell. Some cells have a hyperlink, some have a
+  bare value that itself is a URL, some have both.
+
+Usage:
+    bin/import-learning
+    bin/import-learning --xlsx path/to/file.xlsx
+    bin/import-learning --dry-run            # just print, don't POST
+
+Requires the backend to be running. 409 conflicts (same-category
+duplicates) are reported and skipped. Run it more than once safely:
+already-imported items are skipped, new ones are appended.
+"""
+
+import argparse
+import json
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import openpyxl
+
+API = "http://localhost:8000/api/learning/items"
+DEFAULT_XLSX = Path(__file__).resolve().parent.parent / "lifelonglearning.xlsx"
+
+# Column index → category slug. Columns not listed here are skipped (cols 4
+# and 14 are empty / spacer in the source).
+CATEGORY_BY_COLUMN = {
+    1: "software",
+    2: "ai",
+    3: "hardware",
+    5: "reads",
+    6: "weekly",
+    7: "spiritual",
+    8: "economics",
+    9: "maths",
+    10: "nigeria",
+    11: "finance",
+    12: "speak",
+    13: "chill",
+}
+
+# Row 1-4 are headers / meta in the source sheet. Items start at row 5.
+FIRST_ITEM_ROW = 5
+
+
+def extract_cells(xlsx_path: Path):
+    """Yield (category, title, url) for every importable cell in the file."""
+    wb = openpyxl.load_workbook(xlsx_path, data_only=True)
+    ws = wb.worksheets[0]
+    for row in ws.iter_rows(min_row=FIRST_ITEM_ROW, values_only=False):
+        for cell in row:
+            category = CATEGORY_BY_COLUMN.get(cell.column)
+            if not category:
+                continue
+            value = cell.value
+            link = cell.hyperlink.target if cell.hyperlink else None
+            if value is None and not link:
+                continue
+            # Coerce to string and strip — many cells are pure whitespace
+            # (e.g. column N has rows like "                ").
+            value_str = "" if value is None else str(value).strip()
+            if not value_str and not link:
+                continue
+            # If the visible cell value IS itself a URL, treat it as the
+            # title AND the URL (no separate hyperlink needed). If there's
+            # an explicit hyperlink target distinct from a non-URL value,
+            # use the value as the title and the link as the URL.
+            if value_str.startswith(("http://", "https://")):
+                title = value_str
+                url = link or value_str
+            elif value_str:
+                title = value_str
+                url = link or ""
+            else:
+                # Pure hyperlink with no display text.
+                title = link
+                url = link
+            yield category, title, url or ""
+
+
+def post_item(title: str, category: str, url: str) -> tuple[int, str]:
+    """POST one item. Returns (status_code, response_text)."""
+    body = json.dumps({"title": title, "category": category, "url": url}).encode()
+    req = urllib.request.Request(
+        API,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+    except urllib.error.URLError as e:
+        return 0, f"network error: {e}"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--xlsx", type=Path, default=DEFAULT_XLSX,
+                    help="path to xlsx (default: repo-root/lifelonglearning.xlsx)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print what would be sent without POSTing")
+    args = ap.parse_args()
+
+    if not args.xlsx.exists():
+        print(f"ERROR: {args.xlsx} not found", file=sys.stderr)
+        return 1
+
+    rows = list(extract_cells(args.xlsx))
+    print(f"Found {len(rows)} importable cells in {args.xlsx.name}")
+
+    if args.dry_run:
+        # Group by category for a readable preview
+        by_cat: dict[str, list[tuple[str, str]]] = {}
+        for category, title, url in rows:
+            by_cat.setdefault(category, []).append((title, url))
+        for cat, items in by_cat.items():
+            print(f"\n[{cat}] ({len(items)})")
+            for t, u in items:
+                print(f"  - {t}" + (f"  ↗ {u}" if u else ""))
+        return 0
+
+    created = skipped = failed = 0
+    for category, title, url in rows:
+        status, body = post_item(title, category, url)
+        if 200 <= status < 300:
+            created += 1
+        elif status == 409:
+            skipped += 1
+        else:
+            failed += 1
+            print(f"  FAIL [{status}] {category} :: {title!r} -> {body}", file=sys.stderr)
+
+    print(f"\nDone. created={created} skipped(409)={skipped} failed={failed}")
+    return 0 if failed == 0 else 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

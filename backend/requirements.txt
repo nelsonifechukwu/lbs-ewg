@@ -5,3 +5,4 @@ sqlmodel
 httpx
 beautifulsoup4
 python-multipart
+openpyxl
