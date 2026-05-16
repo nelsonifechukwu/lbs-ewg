@@ -1,5 +1,6 @@
 import DissertationTab from './dissertation/DissertationTab'
 import JobsTab from './jobs/JobsTab'
+import LearningTab from './learning/LearningTab'
 import ThinkersTab from './thinkers/ThinkersTab'
 
 // listUrl is the GET endpoint that returns this tab's full item list. The
@@ -27,5 +28,12 @@ export const tabs = [
     listUrl: '/api/thinkers/entries',
     Component: ThinkersTab,
     progress: false as const,
+  },
+  {
+    name: 'Learning',
+    icon: 'ti-stack-2',
+    path: '/learning',
+    listUrl: '/api/learning/items',
+    Component: LearningTab,
   },
 ]

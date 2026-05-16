@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 from db import engine
 from tabs.dissertation import DissertationTask
 from tabs.jobs import JobApplication
+from tabs.learning import LearningItem
 
 
 router = APIRouter(prefix="/api", tags=["search"])
@@ -26,6 +27,7 @@ class SearchResult(BaseModel):
 TABS = [
     ("dissertation", "Dissertation", DissertationTask),
     ("jobs", "Jobs", JobApplication),
+    ("learning", "Learning", LearningItem),
 ]
 
 

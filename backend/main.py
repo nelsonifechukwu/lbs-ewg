@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from db import init_db
-from tabs import dissertation, jobs, thinkers  # noqa: F401  (import registers SQLModel tables)
+from tabs import dissertation, jobs, learning, thinkers  # noqa: F401  (import registers SQLModel tables)
 import search
 
 
@@ -33,6 +33,7 @@ app.add_middleware(
 app.include_router(dissertation.router)
 app.include_router(jobs.router)
 app.include_router(thinkers.router)
+app.include_router(learning.router)
 app.include_router(search.router)
 
 # User-uploaded images live under backend/uploads/ and are served read-only
